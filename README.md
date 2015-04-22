@@ -23,11 +23,11 @@ subcode: page_content
 
 ![windisplay.png](extra/windisplay.png)
 
-Currently it does anti-aliasing (optionally subpixel antialiasing), but as you can see in the capture, it needs an auto-hinting algorithm to display in small pixels.
+Currently it does anti-aliasing (optionally subpixel anti aliasing), but as you can see in the capture, it needs an auto-hinting algorithm to display in small pixels.
 
 ## Why
 
-The platform API hides all the GUI internals, and open source libraries (such as lib freetype) is too complicated to explore. Having a straight code base with no bells and whistels is more suitable for learning. Also sometime we may wish to have true cross-platform solutions with less complicated dependencies, having a source code that every line of code can be unserstood might be desirable.
+The platform API hides all the GUI internals, and open source libraries (such as lib freetype) is too complicated to explore. Having a straight code base with no bells and whistles is more suitable for learning. Also sometime we may wish to have true cross-platform solutions with less complicated dependencies, having a source code that every line of code can be understood might be desirable.
 
 ## To try
 
@@ -49,7 +49,7 @@ There are four parts currently. `win.def` and `display.def` corresponds to `out/
   Loads truetype font file, translates char code to glyph index via `cmap`, loads glyph metrics, rasterizes the glyph (using functions from raster.c).
 
 * raster.def
-  General purpos antialiasing rasterizer. Main functions are `add_line` and `add_curve`, which uses Xiaolin Wu's line algorithm, modifiled by annotating each pixel with vertical line directions (either up or down), then fills the shape in a scanline fashion. Optionally one can directly rasterize the single pixel anti-aliased outlines.
+  General purpose anti aliasing rasterizer. Main functions are `add_line` and `add_curve`, which uses Xiaolin Wu's line algorithm, modified by annotating each pixel with vertical line directions (either up or down), then fills the shape in a scan line fashion. Optionally one can directly rasterize the single pixel anti-aliased outlines.
 
 The win.def to display.def interface (in addition to the snippet shown above):
 
@@ -160,6 +160,6 @@ fncode: raster_curve(tf_x0, tf_y0, tf_x1, tf_y1, tf_x2, tf_y2)
 
 ## MyDef
 
-As I said, you can go with C source code directly, but going with MyDef source is easier IMHO. You may want to explor [MyDef](http://hz2.org/blog/mydef.html).
+As I said, you can go with C source code directly, but going with MyDef source is easier IMHO. You may want to explore [MyDef](http://hz2.org/blog/mydef.html).
 
 
