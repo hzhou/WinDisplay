@@ -39,16 +39,16 @@ You may directly read the c files in `out` folder, although I would recommend di
 
 There are four parts currently. `win.def` and `display.def` corresponds to `out/win.c`; `font.def` corresponds to `out/font.c`; `raster.def` corresponds to `out/raster.c`.
 
-* win.def
+* `win.def`
   Windows stuff, register and create window, hookup message loop.
 
-* display.def
+* `display.def`
   A display buffer, 4 bytes per pixel. All graphics is basically manipulating this buffer. Set up metrics similar to a PDF page. 
 
-* font.def
+* `font.def`
   Loads truetype font file, translates char code to glyph index via `cmap`, loads glyph metrics, rasterizes the glyph (using functions from raster.c).
 
-* raster.def
+* `raster.def`
   General purpose anti aliasing rasterizer. Main functions are `add_line` and `add_curve`, which uses Xiaolin Wu's line algorithm, modified by annotating each pixel with vertical line directions (either up or down), then fills the shape in a scan line fashion. Optionally one can directly rasterize the single pixel anti-aliased outlines.
 
 The win.def to display.def interface (in addition to the snippet shown above):
