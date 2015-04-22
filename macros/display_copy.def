@@ -1,0 +1,41 @@
+fncode: f_disp_copy_gray(p_disp, tn_x, tn_y, pc_buf, tn_w, tn_h)
+    &call disp_copy_each_line
+        $if tn_width
+            n=i*tn_width
+        $for j=0:tn_w
+            $if pc_buf[n]
+                c=255-pc_buf[n]
+                $(D:buffer)[m]=c
+                $(D:buffer)[m+1]=c
+                $(D:buffer)[m+2]=c
+            m+=4
+            n++
+
+fncode: f_disp_copy_rgb(p_disp, tn_x, tn_y, pc_buf, tn_w, tn_h)
+    $(set:u4=*((DWORD *)($1)))
+    $local pc_temp[4]
+    pc_temp[4]=0
+
+    &call disp_copy_each_line
+        $if tn_width
+            n=i*tn_width*3
+        $for j=0:tn_w
+            $if pc_buf[n] || pc_buf[n+1] || pc_buf[n+2]
+                memcpy(pc_temp, pc_buf+n, 3)
+                $(u4:$(D:buffer)+m) = 0xffffffff - $(u4:pc_temp)
+            m+=4
+            n+=3
+
+#---------------------------------------- 
+subcode: disp_copy_each_line
+    tn_width=0
+    $(set:D=p_disp->$1)
+    $if tn_y+tn_h>$(D:height)
+        tn_h = $(D:height) - tn_y
+    $if tn_x+tn_w>$(D:width)
+        tn_width = tn_w
+        tn_w = $(D:width) - tn_x
+    n = 0
+    $for i=0:tn_h
+        m = ((tn_y+i)*$(D:width)+tn_x)*4
+        BLOCK

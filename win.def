@@ -1,0 +1,96 @@
+include: display.def
+
+include: c/darray.def
+include: c/string.def
+
+subcode: _autoload
+    $call init_debug
+    $(block:main_init)
+        $print main_init
+
+page: test, basic_frame
+    autodecl: auto.inc
+    subcode: main
+        $global display_buffer page
+        $global display_buffer editor
+        # page.$setfont "Metdemo.ttf", 100
+        page.$set_font "cyberbit.ttf", 100
+
+        $(set:cw_w=800)
+        $(set:cw_h=1000)
+	$call win_main, WinDisplay
+
+	# $call start_server
+	# SetForegroundWindow(hwnd_main)
+	$call win_loop
+
+subcode: main_on_WM_CREATE
+    $my CREATESTRUCT * p_create
+    p_create=(CREATESTRUCT *)lparam
+    tn_w=p_create->cx
+    tn_h=p_create->cy
+
+subcode: main_on_WM_SIZE
+    $if wparam==SIZE_MAXIMIZED || wparam==SIZE_RESTORED
+	tn_w=LOWORD(lparam)
+	tn_h=HIWORD(lparam)
+
+	$call on_size, tn_w, tn_h
+        return 0
+
+subcode: main_on_WM_PAINT
+    &call on_paint
+        $call on_draw
+
+
+#---------------------------------------- 
+subcode: page_content
+    $(if:1)
+        page.$set_size 100
+        page.$moveto 10, 680
+        page.$text_line "abcdefghijklmn"
+        page.$text_line "opqrstuvwxyz"
+        page.$text_line "ABCDEFGH"
+        page.$text_line "IJKLMNOPQ"
+        page.$text_line "RSTUVWXYZ"
+        page.$set_size 16
+        page.$text_line "abcdefghijklmn"
+        page.$text_line "opqrstuvwxyz"
+        page.$text_line "ABCDEFGH"
+        page.$text_line "IJKLMNOPQ"
+        page.$text_line "RSTUVWXYZ"
+    $(else)
+        page.$set_size 100
+        page.$moveto 10, 10
+        page.$text "a"
+
+#---------------------------------------- 
+subcode: on_size(w, h)
+    $print "on_size: %d x %d", $(w), $(h)
+    page.$set_page $(w), $(h) - 45
+    $call @page_content
+
+    editor.$resize $(w), 45
+    editor.$offset 0, $(h)-45
+
+    editor.$set_rect 0, 5, 0xa0a0a0
+    editor.$set_rect 7, 2, 0x000000
+    InvalidateRect(hwnd, NULL, TRUE)
+
+#---------------------------------------- 
+include: win32/bitmap.def
+subcode: display_buffer_draw(var, hdc)
+    $call draw_dib, hdc, $(var).offset_x, $(var).offset_y, $(var).buffer, $(var).width, $(var).height
+
+subcode: on_draw
+    $call fill_background, 808080
+    $print "on_draw page: %d x %d", page.width, page.height
+    page.$draw hdc
+    editor.$draw hdc
+
+#---------------------------------------- 
+subcode: assert(cond)
+    $if !($(cond))
+        $print "$(cond) at line %d\n", __LINE__
+	exit(1)
+

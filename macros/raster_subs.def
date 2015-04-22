@@ -1,0 +1,143 @@
+
+#---------------------------------------- 
+#- relying on points being added continuously 
+#---- dir do not change out of sequence
+fncode: add_raster_pair_steep(n_x, n_y, f)
+    $call @debug_pair, steep
+    $call @check_resize_p_raster_points
+    $call @check_resize_s_raster_dirs
+    $local unsigned char value, char dir
+    value = (unsigned char) (f*255)
+    $call @set_raster_dir_add_point, 1
+    $call add_point
+    value = 255-value
+    n_x++
+    dir=0
+    $call add_point
+
+fncode: add_raster_pair_flat(n_x, n_y, f)
+    $call @debug_pair, flat
+    $call @check_resize_p_raster_points
+    $call @check_resize_s_raster_dirs
+    $local unsigned char value, char dir
+    value = (unsigned char) (f*255)
+    $call @set_raster_dir_add_point, 0
+    $call add_point
+    value = 255-value
+    n_y++
+    $call @set_raster_dir_add_point, 1
+    $call add_point
+
+subcode: debug_pair(type)
+    $(if:debug_pair)
+        $if $(debug_pair)
+            $print $(type) pair ($n_x, $n_y) - $f
+#---------------------------------------- 
+subcode: add_point
+    p_raster_points[n_raster_count] = (n_x, n_y, dir, value)
+    n_raster_count ++
+
+subcode: apply_gap(gap)
+    k = n_raster_count-2
+    $(set:v=p_raster_points[k].value)
+    $(v) = (unsigned char)($(v) * $(gap))
+    k++
+    $(v) = (unsigned char)($(v) * $(gap))
+
+subcode: check_resize_p_raster_points
+    $if n_raster_count+2 > n_raster_size
+        $if n_raster_size==0
+            n_raster_size=10
+        $else
+            n_raster_size*=2
+        $realloc(n_raster_size) p_raster_points
+
+subcode: check_resize_s_raster_dirs
+    $if n_raster_ymax < n_y+1
+        tn_size = (n_y+10)*2
+        $realloc(tn_size) s_raster_dirs
+        $for i=n_raster_ymax:tn_size
+            s_raster_dirs[i]=0
+        n_raster_ymax = tn_size-1
+
+#---------------------------------------- 
+subcode: set_raster_dir_add_line
+    i_contour_seg++
+    $if tf_y1>tf_y0
+        $if n_raster_dir==-1
+            b_dir_changed=1
+            n_last_point=n_raster_count
+        n_raster_dir=1
+    $elif tf_y1<tf_y0
+        $if n_raster_dir==1
+            b_dir_changed=1
+            n_last_point=n_raster_count
+        n_raster_dir=-1
+    $else
+        #- inherit last direction or set to 1
+        $if !n_raster_dir
+            n_raster_dir=1
+    # $print "seg %d: n_raster_dir=%d (%f->%f) b_dir_changed:%d", i_contour_seg, n_raster_dir, tf_y0, tf_y1, b_dir_changed
+
+subcode: set_raster_dir_add_point(clear_b_dir_changed)
+    $(set:cache=s_raster_dirs[n_y])
+    $call @debug_point
+
+    $if b_dir_changed
+        $call first_point_after_dir_changed
+    $else
+        $if n_raster_dir == $(cache)
+            #- subsequent points at this scanline
+            dir=0
+        $else
+            #- new point at this scanline
+            $(cache)=n_raster_dir
+            dir=n_raster_dir
+    $call @debug_point_dir
+
+    # -------------------------
+    subcode: first_point_after_dir_changed
+        $if $(cache)==0
+            #- protiruding point
+            dir=0
+        $else
+            #- overwrite, (because it is new dir)
+            dir = n_raster_dir
+        $(if:clear_b_dir_changed=1)
+            $call change_contour_dir
+        #- cache new dir for this scanline
+        $(cache)=n_raster_dir
+
+    subcode: change_contour_dir
+        $for k=n_last_point-2:n_last_point
+            #- check last protruding point
+            $(set:p=p_raster_points[k])
+            $(set:above=(n_raster_dir==1 && $(p).y<n_y))
+            $(set:below=(n_raster_dir==-1 && $(p).y>n_y))
+            $(set:isprev=(s_raster_dirs[$(p).y]==-n_raster_dir))
+            $if ($(above) || $(below)) && $(isprev)
+                $if $(p).dir
+                    $(p).dir=0
+                $else
+                    $(p).dir=n_raster_dir
+                break
+
+        memset(s_raster_dirs, 0, n_raster_ymax+1)
+        b_dir_changed=0
+
+        $if n_raster_count>n_last_point
+            #- because we always add pair of pixels
+            #-   last point may belong to the same seg
+            $(set:p=p_raster_points[n_raster_count-1])
+            s_raster_dirs[$(p).y] = n_raster_dir
+
+    # -------------------------
+    subcode: debug_point
+        $(if:debug_y)
+            $if abs(n_y-$(debug_y))<=1
+                $print "add_point: seg %d, (%d, %d) [%d][%d], cache (dir:%d) b_dir_changed: %d", i_contour_seg, n_x, n_y, n_raster_dir, value, $(cache), b_dir_changed
+    subcode: debug_point_dir
+        $(if:debug_y)
+            $if abs(n_y-$(debug_y))<=1
+                $print "    ---> dir = %d", dir
+

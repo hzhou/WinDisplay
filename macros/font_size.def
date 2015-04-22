@@ -1,0 +1,41 @@
+#---------------------------------------- 
+#---- cache, size, memory
+
+subcode:: _autoload
+    $struct(font) n_pt_size, f_px_size
+    $struct(font) pc_cache, struct glyph cur_glyph
+
+subcode:: font_init
+    #- nominal point size (72pt/inch), only needed as query
+    pf->n_pt_size = 12
+    #- px size in font EM units
+    pf->f_px_size = 0.012f
+    #- memory
+    pf->pc_cache=NULL
+    pf->cur_glyph.buf=NULL
+
+subcode:: font_free
+    $if pf->pc_cache
+        free(pf->pc_cache)
+
+#---------------------------------------- 
+#---- * set f_px_size
+#---- * make sure there's enough memory
+fncode: font_set_size(struct font * pf, n_pt_size, f_pt_size)
+    pf->n_pt_size = n_pt_size
+    pf->f_px_size = f_pt_size*n_pt_size/pf->p_head->u2_em
+
+    $call calc_max_width
+    # $print "font_set_size: %d -> %f, %d x %d", n_pt_size, pf->f_px_size, tn_w, tn_h
+
+    tn_size = tn_w*tn_h
+    $realloc(tn_size) pf->pc_cache
+
+    # ----------
+    subcode: calc_max_width
+        tn_w = pf->p_head->n2_xmax - pf->p_head->n2_xmin + 1
+        tn_h = pf->p_head->n2_ymax - pf->p_head->n2_ymin + 1
+        tn_w = (int)(tn_w*pf->f_px_size)+1
+        tn_h = (int)(tn_h*pf->f_px_size)+1
+        $call @set_size_transformation
+

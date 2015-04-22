@@ -1,0 +1,20 @@
+#---------------------------------------- 
+macros:
+    subpixel: 1
+
+subcode:: add_point_transformation
+    $(if:subpixel)
+        tf_x *= 3
+
+subcode:: set_size_transformation
+    $(if:subpixel)
+        tn_w *= 3
+
+subcode: font_raster
+    $(if: subpixel)
+        memset(glyph->buf, 0, glyph->w * glyph->h * 3)
+        raster_fill(glyph->buf, glyph->w*3)
+    $(else)
+        memset(glyph->buf, 0, glyph->w * glyph->h)
+        raster_fill(glyph->buf, glyph->w)
+

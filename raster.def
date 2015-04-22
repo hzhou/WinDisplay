@@ -1,0 +1,75 @@
+include: macros/raster_line.def
+include: macros/raster_fill.def
+include: macros/raster_subs.def
+
+include: macros/misc.def
+
+subcode: _autoload
+    $call init_debug
+
+page: raster
+    # dir: 1 up, 0 flat, -1 down
+    $struct(raster_point) short x, short y, char dir, unsigned char value
+    $global struct raster_point * p_raster_points=NULL
+    $global n_raster_size=0
+    $global n_raster_count=0
+    
+    $global s_raster_dirs=NULL
+    $global n_raster_ymax=0
+
+    $list raster_start, raster_new_contour, raster_end_contour
+    $list raster_line, raster_curve
+    $list raster_fill, raster_stroke
+
+macros:
+    # debug_edge: 1
+    # debug_y: 11
+    # debug_pair: n_y<14 && n_y>8 && n_x>35
+
+########################################
+#------------------
+fncode: raster_start
+    n_raster_count=0
+
+fncode: raster_new_contour
+    $global i_contour_start
+    i_contour_start = n_raster_count
+    $global i_contour_seg, n_raster_dir, b_dir_changed, n_last_point
+    i_contour_seg=0
+    n_raster_dir=0
+    b_dir_changed=0
+    $if n_raster_ymax>0
+        memset(s_raster_dirs, 0, n_raster_ymax+1)
+
+fncode: raster_end_contour
+    # the first 2 points are line starts
+    k=i_contour_start
+    $(set:p=p_raster_points[k].$1)
+    $(set:q=p_raster_points[j].$1)
+    $if $(p:dir)==n_raster_dir
+        $for i=0:4
+            $if $(p:dir)==s_raster_dirs[$(p:y)]
+                $(p:dir)=0
+            k++
+    $elif $(p:dir)==(-n_raster_dir)
+        $call @check_protrusion
+
+    # -----------------------
+    subcode: check_protrusion
+        #-- check protrusion
+        $if n_raster_dir>0
+            k++
+            j=n_raster_count-1
+            $if $(p:y) > $(q:y)
+                $(p:dir)++
+            $elif $(p:y)<$(q:y)
+                $(q:dir)--
+        $else
+            j=n_raster_count-2
+            $if $(p:y) < $(q:y)
+                $(p:dir)--
+            $elif $(p:y) > $(q:y)
+                $(q:dir)++
+
+
+########################################

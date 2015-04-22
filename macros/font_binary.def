@@ -1,0 +1,33 @@
+
+fncode: f_get_short(s)
+    $return_type int
+    $local s_t[2]={s[1], s[0]}
+    return *(short*)s_t
+
+fncode: f_get_int(s)
+    $return_type int
+    $local s_t[4]={s[3],s[2],s[1],s[0]}
+    return *(int*)s_t
+
+fncode: swap_word(s, n)
+    $for i=0:n/2
+        j=n-1-i
+        c=s[i]
+        s[i]=s[j]
+        s[j]=c
+
+#---------------------------------------- 
+subcode: get_shorts(s, @plist)
+    $(set:off=0)
+    $(for:v in $(plist))
+        tn_$(v) = f_get_short($(s)+$(off))
+        $(reset:off+=2)
+
+subcode: get_ints(s, @plist)
+    $(set:off=0)
+    $(for:v in $(plist))
+        tn_$(v) = f_get_int($(s)+$(off))
+        $(reset:off+=4)
+
+
+

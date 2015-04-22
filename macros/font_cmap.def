@@ -1,0 +1,62 @@
+fncode: font_cmap(struct font * pf, int c)
+    $return_type int
+    tn_idx=0
+    $if pf->s_cmap == NULL
+        return 0
+    s = pf->s_cmap
+    tn_format = f_get_short(s)
+    $if tn_format == 4
+        tn_segs = f_get_short(s+6)
+
+        ts_endcodes   = s + 14
+        ts_startcodes = ts_endcodes + tn_segs + 2
+        ts_deltas     = ts_startcodes + tn_segs
+        ts_rangeoffs  = ts_deltas + tn_segs
+        
+        i=0
+        $while i<tn_segs; i+=2
+            tn_end = f_get_short(ts_endcodes+i)
+            $if c <= tn_end
+                break
+        tn_start = f_get_short(ts_startcodes+i)
+        tn_delta = f_get_short(ts_deltas+i)
+        tn_rangeoff = f_get_short(ts_rangeoffs+i)
+
+        $if c>=tn_start
+            $if tn_rangeoff == 0
+                tn_idx = (c+tn_delta) & 0xffff
+            $else
+                ts_index = ts_rangeoffs + i +tn_rangeoff
+                tn_idx = f_get_short(ts_index + (c - tn_start)*2)
+        $else
+            return 0
+    $elif tn_format == 6
+        tn_start = f_get_short(s+6)
+        tn_count = f_get_short(s+8)
+        ts_index = s+10
+        $if c>=tn_start
+            tn_idx = f_get_short(ts_index + (c-tn_start)*2)
+        $else
+            return 0
+    $elif tn_format == 12
+        tn_segs = f_get_int(s+12)
+        ts_group = s+16
+        $for i=0:tn_segs
+            tn_end = f_get_int(ts_group+4)
+            $if c<=tn_end
+                break
+            ts_group+=12
+        tn_start = f_get_int(ts_group)
+        tn_code = f_get_int(ts_group+8)
+        $if c>=tn_start
+            tn_idx = tn_code + (c-tn_start)
+        $else
+            return 0
+    $else
+        return 0
+
+    $if tn_idx<pf->n_glyphs
+        return tn_idx
+    $else
+        return 0
+

@@ -1,0 +1,155 @@
+include: macros/misc.def
+
+macros: 
+    # debug_point: 1
+
+subcode: font_raster
+    memset(glyph->buf, 0, glyph->w * glyph->h)
+    $(if:1)
+        raster_fill(glyph->buf, glyph->w)
+    $(else)
+        raster_stroke(glyph->buf, glyph->w)
+
+#---------------------------------------- 
+fncode: font_render(struct font * pf, int c)
+    $return_type struct glyph *
+
+    $local struct glyph * glyph = NULL
+    glyph=&(pf->cur_glyph)
+    glyph->buf = pf->pc_cache
+    tn_idx = font_cmap(pf, c)
+    # $print "font_render: %c --> [%d]", c, tn_idx
+    $(if:1)
+        $call get_hmtx
+        glyph->advance = tn_advance * pf->f_px_size 
+        &call get_glyph
+            $call get_glyph_size
+            s=ts_glyph+10
+            raster_start()
+            $if tn_contours>0
+                $call @font_render_simple
+            $else
+                $call font_render_compound
+            $call @font_raster
+    return glyph
+
+    # --------------------
+    subcode: get_glyph_size
+        $call get_shorts, ts_glyph, contours,xmin,ymin,xmax,ymax
+        glyph->w = (int)((tn_xmax-tn_xmin+1)*pf->f_px_size)+2
+        glyph->h = (int)((tn_ymax-tn_ymin+1)*pf->f_px_size)+2
+        glyph->x = (int)((-tn_left) * pf->f_px_size)
+        glyph->y = (int)((-tn_ymin) * pf->f_px_size)
+        # $print "glyph: [%d,%d  %dx%d] %d countours", glyph->x, glyph->y, glyph->w, glyph->h, tn_contours
+
+#---------------------------------------- 
+#- contour, instructions, flags, x, y
+subcode: font_render_simple
+    $call get_contour
+    $call get_instruction
+    $call get_flags_xs_ys
+    # $print "%d points, %d ins", tn_points, tn_instruction
+    $call raster_glyf
+
+#---------------------------------------- 
+#-  ts_flags, ts_x, ts_y
+subcode: raster_glyf
+    &call each_point
+        $call add_point
+
+    # -----------------------------------
+    subcode: each_contour
+        $for i_contour=0:tn_contours
+            tn_end = f_get_short(ts_contour+i_contour*2)
+            BLOCK
+
+    # -----------------------------------
+    subcode: start_contour
+        $local tb_start
+        $local tf_x_start, tf_y_start
+        $local tf_x0, tf_y0, tf_x1, tf_y1, tf_x, tf_y
+        tb_start=1
+        raster_new_contour()
+
+    subcode: end_contour
+        $call zexpr, tf_z = tf_z_start
+        $call raster_z0_z1_z
+        raster_end_contour()
+
+
+    subcode: add_point
+        $call zexpr, tf_z = (tn_z - tn_zmin)*pf->f_px_size
+        $call @add_point_transformation
+        $if tb_start
+            $(if:debug_point)
+                $print "start contour: %f, %f", tf_x, tf_y
+            $call set_first_point
+        $elif tn_flag & 0x1
+            $(if:debug_point)
+                $print "point %d: %f, %f", i_pt, tf_x, tf_y
+            $call raster_on_curve
+        $else
+            $(if:debug_point)
+                $print "point %d: %f, %f - off", i_pt, tf_x, tf_y
+            $if tb_curve
+                $call raster_skip_curve
+            $else
+                $call note_off_curve
+
+        subcode: set_first_point
+            tb_start=0
+            tb_curve = 0
+            $call zexpr, tf_z0 = tf_z
+            $call zexpr, tf_z_start = tf_z
+
+        subcode: raster_on_curve
+            $call raster_z0_z1_z
+            $call zexpr, tf_z0 = tf_z
+            tb_curve = 0
+
+        subcode: note_off_curve
+            tb_curve=1
+            $call zexpr, tf_z1 = tf_z
+
+        subcode: raster_skip_curve
+            &call zexpr
+                tf_z_temp = tf_z
+                tf_z = (tf_z1 + tf_z)/2
+                raster_curve(tf_x0, tf_y0, tf_x1, tf_y1, tf_x, tf_y)
+                tf_z0 = tf_z
+                tf_z1 = tf_z_temp
+
+    subcode: raster_z0_z1_z
+        $if tb_curve
+            raster_curve(tf_x0, tf_y0, tf_x1, tf_y1, tf_x, tf_y)
+        $else
+            raster_line(tf_x0, tf_y0, tf_x, tf_y)
+
+
+#---------------------------------------- 
+#-- not complete
+subcode: font_render_compound
+    $dowhile tn_flag & 0x20
+        tn_flag=f_get_short(s)
+        tn_idx =f_get_short(s+2)
+        $if tn_flag & 0x1
+            tn_x = f_get_short(s+4)
+            tn_y = f_get_short(s+6)
+            s+=8
+        $else
+            tn_x = s[4]
+            tn_y = s[5]
+            s+=6
+        $if tn_flag & 0x8
+            tn_a = f_get_short(s)
+            s+=2
+        $elif tn_flag & 0x20
+            tn_a = f_get_short(s)
+            tn_d = f_get_short(s+2)
+            s+=4
+        $elif tn_flag & 0x40
+            tn_a = f_get_short(s)
+            tn_b = f_get_short(s+2)
+            tn_c = f_get_short(s+4)
+            tn_d = f_get_short(s+6)
+            s+=8

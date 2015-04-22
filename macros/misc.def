@@ -1,0 +1,35 @@
+include: ext.def
+
+perlcode: zexpr
+    &call filter_codelist
+        $call filter, $t
+
+    subcode: direct
+        $call filter, $param
+
+    subcode: filter(v)
+        $if $(v)=~/_z/
+            $(for:z in x,y)
+                my $t2 = $(v)
+                $t2 =~s/_z/_$(z)/g
+                push @source, $t2
+        $else
+            push @source, $(v)
+
+           
+#---------------------------------------- 
+subcode: enum_monitors
+    EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, 0)
+    $(block:global_init)
+       	$global n_monitor=0
+	$global MONITORINFOEX p_monitor[10]
+	$function MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprc, LPARAM data)
+	    $return_type BOOL CALLBACK
+	    $if n_monitor<10
+		p_monitor[n_monitor].cbSize=sizeof(MONITORINFOEX)
+		GetMonitorInfo(hMonitor, (LPMONITORINFO)&p_monitor[n_monitor])
+		$local RECT rct
+		rct=p_monitor[n_monitor].rcWork
+		$call add_error_f "monitor %d: (%d, %d) %d x %d", n_monitor, rct.left, rct.top, rct.right-rct.left, rct.bottom-rct.top
+		n_monitor++
+	    return 1;

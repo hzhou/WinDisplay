@@ -1,0 +1,76 @@
+# include: macros/font_subpixel.def
+include: macros/font_render.def 
+include: macros/font_size.def
+
+include: macros/font_binary.def
+include: macros/font_ttf.def
+include: macros/font_cmap.def
+
+subcode: _autoload
+    $struct(glyph) buf, int x, int y, int w, int h, float advance
+    $struct(glyph) -public=>1
+
+    #-> s: font file content
+    $struct(font) s
+
+page: font
+    autodecl: auto.inc
+
+    $list load_font
+    $list font_set_size, font_render
+
+#---------------------------------------- 
+subcode: _autoload
+    $struct(ttf_head) $(head)
+    $struct(ttf_hhea) $(hhea)
+
+    $call init_debug
+
+subcode:: font_init
+    pf->s = NULL
+    pf->s_cmap=NULL
+
+subcode:: font_free
+    $if pf->s
+        free(pf->s)
+#---------------------------------------- 
+fncode: load_font(s_fontfile)
+    str = load_file(s_fontfile)
+    # $print "loaded_file: %s size: %d, loaded: %d\n", s_fontfile, str.size, str.n
+
+    $local struct font * pf
+    $allocate pf
+    $call @font_init
+
+    $local unsigned char * s
+    s=(unsigned char *) str.s
+    $call parse_ttf
+
+    return pf
+
+fncode: unload_font(struct font * pf)
+    $call @font_free
+    free(pf)
+
+#---------------------------------------- 
+include: win32/error.def
+subcode: _autoload
+    $struct(string) s, n, unsigned int size
+    $register_name(str) struct string
+
+fncode: load_file(s_file)
+    $local HANDLE hf
+    hf=CreateFile(s_file, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)
+    $if hf==INVALID_HANDLE_VALUE
+        get_error("CreateFile")
+
+    $local __int64 size
+    GetFileSizeEx(hf, (PLARGE_INTEGER)&size)
+    $local str
+    str.size=(unsigned int)size
+    $allocate(str.size) str.s
+    $if !ReadFile(hf, str.s, str.size, &str.n, NULL)
+        get_error("ReadFile")
+    CloseHandle(hf)
+    return str
+

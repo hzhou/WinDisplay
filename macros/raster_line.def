@@ -1,0 +1,172 @@
+#---- Xiaolin Wu's line algorithm -----------
+#- ref: http://en.wikipedia.org/wiki/Xiaolin_Wu%27s_line_algorithm
+#-    there is an addition goal to track scanline directions
+fncode: raster_line(tf_x0, tf_y0, tf_x1, tf_y1)
+    $call @debug
+    $call set_raster_dir_add_line
+    $call set_steep_swap
+    $call set_delta_gradient
+    $call calc_ends
+    $if tn_x0==tn_x1
+        $call raster_single_end
+    $else
+        $if tb_steep
+            #-- x, x+1 pair of pixels ----
+            $call raster_start, v
+            $call raster_stem, v
+            $call raster_finish, v
+        $else
+            #-- y, y+1 pair of pixels ----
+            $call raster_start, h
+            $call raster_stem, h
+            $call raster_finish, h
+
+    # --------------------
+    subcode: debug
+        $(if:debug_y or debug_pair)
+            $print raster_line $tf_x0, $tf_y0 - $tf_x1, $tf_y1
+    # --------------------
+    subcode: set_steep_swap
+        tb_steep = fabs(tf_y1-tf_y0)>fabs(tf_x1-tf_x0)
+        $if tb_steep
+            $call swap, tf_x0, tf_y0
+            $call swap, tf_x1, tf_y1
+        tb_swapd = tf_x0>tf_x1
+        $if tb_swapd
+            $call swap, tf_x0, tf_x1
+            $call swap, tf_y0, tf_y1
+
+    subcode: set_delta_gradient
+        tf_delta_x = tf_x1 - tf_x0
+        tf_delta_y = tf_y1 - tf_y0
+        tf_gradient = tf_delta_y/tf_delta_x
+
+    # -------------------
+    macros:
+        round: (float)(floor($1+0.5))
+        fpart: (float)($1 - floor($1))
+        rfpart: (float)(floor($1)+1-($1))
+
+    subcode: calc_ends
+        #-- tn_x represents [tn_x-0.5, tn_x+0.5]
+        $(for:i in 0,1)
+            tf_xend$(i) = $(round:tf_x$(i))
+            tf_yend$(i)= tf_y0 + tf_gradient * (tf_xend$(i) - tf_x0)
+            $if tf_yend$(i)<0
+                tf_yend$(i)=0
+            tn_x$(i) = (int)tf_xend$(i)
+            tn_y$(i) = (int)tf_yend$(i)
+
+    subcode: get_gap(i)
+        #-- fraction of tf_x in  [tn_x-0.5, tn_x+0.5]
+        $(if:i=0)
+            tf_gap = $(rfpart:tf_x$(i)+0.5)
+        $(else)
+            tf_gap = $(fpart:tf_x$(i)+0.5)
+        $call apply_gap, tf_gap
+
+    # -------------------------
+    subcode: raster_start(vh)
+        $if tb_swapd
+            $call raster_end, $(vh), 1
+        $else
+            $call raster_end, $(vh), 0
+
+    subcode: raster_finish(vh)
+        $if tb_swapd
+            $call raster_end, $(vh), 0
+        $else
+            $call raster_end, $(vh), 1
+
+    # -------------------------
+    subcode: raster_end(vh, i)
+        tf_y=tf_yend$(i)
+        $call add_$(vh), tn_x$(i), tn_y$(i)
+        $call get_gap, $(i)
+
+    subcode: raster_stem(vh)
+        tf_y=tf_yend0
+        $for tn_x=tn_x0+1:tn_x1
+            tf_y += tf_gradient
+            $call add_$(vh), tn_x, (int)(tf_y)
+
+    # ---------------
+    subcode: add_v(x, y)
+        # $print "---- add_v %d, %d - %f", $(x), $(y), tf_y
+        add_raster_pair_steep($(y), $(x), $(rfpart:tf_y))
+
+    subcode: add_h(x,y)
+        add_raster_pair_flat($(x), $(y), $(rfpart:tf_y))
+
+    # -------------------
+    subcode: raster_single_end
+        # tf_y = (tf_y0+tf_y1)/2
+        tf_y=tf_yend0
+        $if tb_steep
+            $call add_v, tn_x0, tn_y0
+        $else
+            $call add_h, tn_x0, tn_y0
+        tf_gap=tf_x1-tf_x0
+        $call apply_gap, tf_gap
+        # $print raster_single_end -- $tn_x0, $tn_y0 -- $tf_gap, $tf_y
+
+
+#---------------------------------------- 
+fncode: raster_curve(tf_x0, tf_y0, tf_x1, tf_y1, tf_x2, tf_y2)
+    $if fabs(tf_x2-tf_x0)<=1 && fabs(tf_y2-tf_y0)<=1
+        raster_line(tf_x0, tf_y0, tf_x2, tf_y2)
+    $else
+        &call zexpr
+            tf_z11 = (tf_z0+tf_z1)/2
+            tf_z22 = (tf_z2+tf_z1)/2
+            tf_z = (tf_z11+tf_z22)/2
+        raster_curve(tf_x0, tf_y0, tf_x11, tf_y11, tf_x, tf_y)
+        raster_curve(tf_x, tf_y, tf_x22, tf_y22, tf_x2, tf_y2)
+
+
+#---------------------------------------- 
+fncode: raster_sort()
+    macros:
+        p: p_raster_points[$1]
+        type: struct raster_point
+
+    # ----------------------
+    $for i=1:n_raster_count
+        $my $(type) t
+        t = $(p:i)
+        &call find
+            $call shift
+            $(p:j)=t
+    i=n_raster_count-1
+    $while $(p:i).y==SHRT_MAX
+        i--
+    n_raster_count=i+1
+
+    subcode: find
+        $my j=i-1
+        $while j>=0; j--
+            &call cmp, y
+                &call cmp, x
+                    tn_v = $(p:i).value + $(p:j).value
+                    $(p:j).value = tn_v<256 ? tn_v : 255
+                    $(p:j).dir += $(p:i).dir
+                    $include <limits.h>
+                    $(p:i).y = SHRT_MAX
+                    j=i
+                    break
+        j++
+        $if i>j
+            BLOCK
+
+    subcode: cmp(x)
+        $if $(p:i).$(x)>$(p:j).$(x)
+            break
+        $elif $(p:i).$(x)<$(p:j).$(x)
+            j--
+            continue
+        $else
+            BLOCK
+
+    subcode: shift
+        memmove(&$(p:j+1), &$(p:j), sizeof($(type))*(i-j))
+

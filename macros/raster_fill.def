@@ -1,0 +1,85 @@
+
+#---------------------------------------- 
+fncode: raster_stroke(buf, n_w)
+    raster_sort()
+    i=0
+    $while i<n_raster_count; i++
+        $(set:a=p_raster_points[i])
+        k=$(a).y*n_w+$(a).x
+        buf[k]=$(a).value
+
+#---------------------------------------- 
+fncode: raster_fill(buf, n_w)
+    # $print "raster_fill: $n_raster_count points"
+    raster_sort()
+    n_check=0
+    tn_top_y=p_raster_points[n_raster_count-1].y
+    $my i=0
+    $call start_scanline
+    $while i<n_raster_count
+        k=$(a).y*n_w+$(a).x
+        tn_x=$(a).x-1
+        $call across_edge
+        $if $(a).y!=tn_y
+            $call start_scanline
+        $elif tn_dir!=0
+            $call fill_gap
+    $call check
+
+    macros:
+        a: p_raster_points[i]
+    subcode: start_scanline
+        tn_dir=0
+        tn_y=$(a).y
+    subcode: across_edge
+        k_start=k
+        b_fill=tn_dir
+        $while i<n_raster_count; i++
+            $call @debug_point
+            $if $(a).y!=tn_y || $(a).x!=tn_x+1
+                break
+            tn_x=$(a).x
+            tn_dir+=$(a).dir
+            buf[k]=$(a).value
+            $if !buf[k]
+                buf[k]=1
+            k++
+        $call @debug_edge
+        $if tn_y>0 && tn_y<tn_top_y
+            #- need fill internal edge points later
+            #-   reuse the p_raster_points buffer
+            $if b_fill
+                p_raster_points[n_check].x=k_start
+            $else
+                p_raster_points[n_check].x=k_start+1
+            $if tn_dir
+                p_raster_points[n_check].y=k
+            $else
+                p_raster_points[n_check].y=k-1
+            n_check++
+
+    subcode: debug_point
+        $(if:debug_y)
+            $if abs($(a).y-$(debug_y))<=1
+                $print "%d: (%d,%d)-%d", i, $(a).x,$(a).y,$(a).dir
+
+    subcode: debug_edge
+        $(if:debug_edge)
+            $if $(a).y>tn_y && tn_dir!=0
+                $print "Missed fill scanline y=$tn_y [$tn_dir]"
+            $print "---- edge: y %d, x %d-%d, fill: %d, dir: %d", tn_y, tn_x-(k-k_start)+1, tn_x, b_fill, tn_dir
+
+    subcode: fill_gap
+        $for j=0:$(a).x-tn_x-1
+            buf[k]=255
+            k++
+    subcode: check
+        $(set:p=p_raster_points[i])
+        $for i=0:n_check
+            tn_y=$(p).x/n_w
+            tn_x=$(p).x % n_w
+            $for j=$(p).x:$(p).y
+                $if buf[j-n_w] && buf[j+n_w]
+                    buf[j]=255
+
+

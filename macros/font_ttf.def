@@ -1,0 +1,193 @@
+macros:
+    # debug_contour: 1
+
+macros:
+    head: s_ver[4], s_rev[4], u4_checksum, s_magic[4], u2_flag, u2_em, s_created[8], s_modified[8], n2_xmin, n2_ymin, n2_xmax, n2_ymax, u2_style, u2_minsize, n2_direction, n2_index_format, n2_glyph_format
+    hhea: s_ver[4], n2_ascent, n2_descent, n2_linegap, u2_advance_max, n2_left_min, n2_right_min, n2_extent_max, n2_caretSlopeRise, n2_caretSlopeRun, n2_caretOffset, s_reserved[10], u2_num_metrics 
+
+#---------------------------------------- 
+#---- ref: load_font
+#----
+subcode: parse_ttf
+    $call get_shorts, s, major, minor, tables
+    # $print "TTF $tn_major.$tn_minor: $tn_tables tables"
+
+    pf->s = s
+    $for i=0:tn_tables
+        tn_pos=12+16*i
+        tn_off = f_get_int(s+tn_pos+8)
+        tn_size = f_get_int(s+tn_pos+12)
+        $map set_table, head, hhea
+        $map set_table_s, loca, glyf, hmtx
+        $call get_cmap
+        $call get_maxp
+    # $print "em: %d, (%d, %d) - (%d, %d)\n", pf->p_head->u2_em, pf->p_head->n2_xmin, pf->p_head->n2_ymin, pf->p_head->n2_xmax, pf->p_head->n2_ymax
+    # $print "  %d glyphs", pf->n_glyphs
+
+#----
+subcode: set_table(name)
+    $case (s+tn_pos) $eq "$(name)"
+        $struct(font) struct ttf_$(name)* p_$(name)
+        pf->p_$(name) = (struct ttf_$(name)*)(s+tn_off)
+        $(for:w in $($(name)))
+            $(if:w~[nu][248])
+                swap_word((char *)(&pf->p_$(name)->$(w)), $(w:1:1))
+                # $print "    $(w): %d", pf->p_$(name)->$(w)
+
+subcode: set_table_s(name)
+    $case (s+tn_pos) $eq "$(name)"
+        $struct(font) s_$(name)
+        pf->s_$(name) = s+tn_off
+
+subcode: get_table(name)
+    $case (s+tn_pos) $eq "$(name)"
+        BLOCK
+
+#----
+subcode: get_cmap
+    &call get_table, cmap
+        tn_cmap = f_get_short(s+tn_off+2)
+        $struct(font) s_cmap, n_cmap_id0, n_cmap_id1
+        $for j=0:tn_cmap
+            tn_pos = tn_off+4+j*8
+            tn_id0 = f_get_short(s+tn_pos)
+            tn_id1 = f_get_short(s+tn_pos+2)
+            tn_off2 = f_get_int(s+tn_pos+4)
+            tn_format = f_get_short(s+tn_off+tn_off2)
+            $if $(g||:tn_id0==0,3) && $(g||:tn_format==4,6,12)
+                pf->s_cmap = s+tn_off+tn_off2
+                pf->n_cmap_id0 = tn_id0
+                pf->n_cmap_id1 = tn_id1
+                break
+
+subcode: get_maxp
+    &call get_table, maxp
+        $struct(font) n_glyphs
+        pf->n_glyphs = f_get_short(s+tn_off+4)
+
+#---------------------------------------- 
+#---- ref: font_render
+#----
+subcode: get_glyph
+    $if pf->p_head->n2_index_format == 0
+        ts_loca = pf->s_loca+2*tn_idx
+        $call get_shorts, ts_loca, off, off2
+    $else
+        ts_loca = pf->s_loca+4*tn_idx
+        $call get_ints,   ts_loca, off, off2
+    # $print glyf: $tn_off - $tn_off2
+    $if tn_off2>tn_off
+        #-- not empty/space -----
+        ts_glyph = pf->s_glyf + tn_off
+            BLOCK
+#----
+subcode: get_hmtx
+    tn_metrics = pf->p_hhea->u2_num_metrics
+    $if tn_idx<tn_metrics
+        s = pf->s_hmtx + 4*tn_idx
+        $call get_shorts, s, advance, left
+    $else
+        s = pf->s_hmtx + 4*tn_metrics
+        tn_advance = f_get_short(s-2)
+        tn_left = f_get_short(s+tn_idx*2+tn_metrics*2)
+    # $print "hmtx: metrics %d, left: %d, advance: %d", tn_metrics, tn_left, tn_advance
+
+#---------------------------------------- 
+#-- ref: font_render_simple
+#-- 
+#-- 1st round
+subcode: get_contour
+    #- s: start of glyf entry
+    ts_contour = s
+    tn_points=f_get_short(s+(tn_contours-1)*2)+1
+
+subcode: get_instruction
+    ts_instruction = s+tn_contours*2 +2 
+    tn_instruction = f_get_short(ts_instruction-2)
+
+subcode: get_flags_xs_ys
+    ts_flags = ts_instruction+tn_instruction
+    tn_xsize=0
+    $my i=0
+    s = ts_flags
+    $while i<tn_points
+        #-- xsize -------
+        $if s[0] & 0x2
+            tn_unit=1
+        $elif s[0] & 0x10
+            tn_unit=0
+        $else
+            tn_unit=2
+        #-- flag repeat ------
+        $if s[0] & 0x8
+            tn_rep = s[1]+1
+            tn_xsize += tn_unit*tn_rep
+            i+=tn_rep
+            s+=2
+        $else
+            tn_xsize += tn_unit
+            i++
+            s++
+    ts_x = s
+    ts_y = ts_x + tn_xsize
+
+#-- 2nd round
+subcode: each_point
+    $call @loop_init
+    $while i_pt<tn_points
+        $call @get_flag_and_rep
+        $if i_pt+tn_rep<=tn_points
+            $for j=0:tn_rep
+                $call get_point_xy, 0x02, 0x10, x
+                $call get_point_xy, 0x04, 0x20, y
+                $call @debug
+                $if i_pt>tn_end
+                    tn_end = f_get_short(ts_contour + i_contour*2)
+                    $call @debug_contour
+                    i_contour++
+                    $call @start_contour
+                BLOCK
+                $if i_pt>=tn_end
+                    $call @end_contour
+                i_pt++
+        $else
+            $print Error: i_pt: $i_pt, tn_rep=$tn_rep, tn_points=$tn_points
+            break
+
+    # ------
+    subcode: debug
+        $(if:debug_contour)
+            $print "point %d: %d, %d -- flag: %x, rep: %d/%d", i_pt, tn_x, tn_y, tn_flag, j, tn_rep
+    subcode: debug_contour
+        $(if:debug_contour)
+            $print "contour %d: %d", i_contour, tn_end
+    # -----
+    subcode: loop_init
+        tn_x=0
+        tn_y=0
+        $(for:x in contour, pt, f, x, y)
+            i_$(x) = 0
+        tn_end=-1
+    # -----
+    subcode: get_flag_and_rep
+        tn_flag = ts_flags[i_f]
+        $if tn_flag & 0x08
+            tn_rep = ts_flags[i_f+1]+1
+            i_f+=2
+        $else
+            tn_rep = 1
+            i_f++
+    # -----
+    subcode: get_point_xy(bit, bit2, x)
+        $if tn_flag & $(bit)
+            $if tn_flag & $(bit2)
+                tn_$(x) += (unsigned char)ts_$(x)[i_$(x)]
+            $else
+                tn_$(x) += -(unsigned char)ts_$(x)[i_$(x)]
+            i_$(x)++
+        $else
+            $if tn_flag & $(bit2)
+                # same
+            $else
+                tn_$(x) += f_get_short(ts_$(x)+i_$(x))
+                i_$(x)+=2
