@@ -58,12 +58,6 @@ subcode: raster_glyf
         $call add_point
 
     # -----------------------------------
-    subcode: each_contour
-        $for i_contour=0:tn_contours
-            tn_end = f_get_short(ts_contour+i_contour*2)
-            BLOCK
-
-    # -----------------------------------
     subcode: start_contour
         $local tb_start
         $local tf_x_start, tf_y_start
