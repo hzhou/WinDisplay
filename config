@@ -1,0 +1,3 @@
+output_dir: out
+module: win32
+make-decl: mydef_decl auto.inc out/font.c out/raster.c
