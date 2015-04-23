@@ -31,7 +31,32 @@ The platform API hides all the GUI internals, and open source libraries (such as
 
 ## To try
 
-The code is developed with MyDef (a meta layer), but you can directly try with the c files in `out/` folder. Under visual studio command prompt, go to `out/` folder, type `make`, it should compile and produce `test.exe`. It loads `cyberbit.ttf` (replace with your own true type font file, use `grep` to find the location to edit), and displays the text as shown.
+The code is developed with MyDef (a meta layer), but you can directly try with the c files in `out/` folder. Under visual studio command prompt, go to `out/` folder:
+
+```
+out> ls
+cyberbit.ttf  font.c  make.bat  raster.c  test.c
+
+out> make
+
+>cl /W3 test.c font.c raster.c
+Microsoft (R) 32-bit C/C++ Optimizing Compiler Version 16.00.30319.01 for 80x86
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+test.c
+font.c
+raster.c
+Generating Code...
+Microsoft (R) Incremental Linker Version 10.00.30319.01
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+/out:test.exe
+test.obj
+font.obj
+raster.obj
+
+out> test
+```
 
 ## To read
 
